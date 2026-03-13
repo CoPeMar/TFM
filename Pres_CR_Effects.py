@@ -35,17 +35,26 @@ data_hour.dropna(inplace=True,axis=0,subset=["top","bottom","c8"])
 #sns.heatmap(comparison_df.corr(numeric_only = True), annot=False, linewidths = 0.75, linecolor = "black")
 
 #Creamos nuevos dataframes con los datos de presión, temperatura y humedad según su altura, para poder hacer la comparación con los datos de conteo
-pres_df = pd.DataFrame(index=data_hour.index,columns=weather_full["heightAboveSea"].unique())
-t_df = pd.DataFrame(index=data_hour.index,columns=weather_full["heightAboveSea"].unique())
-r_df = pd.DataFrame(index=data_hour.index,columns=weather_full["heightAboveSea"].unique())
+pres_df = pd.DataFrame(index=data_hour.index,columns=np.insert(weather_full["heightAboveSea"].unique(),5,2364))
+t_df = pd.DataFrame(index=data_hour.index,columns=np.insert(weather_full["heightAboveSea"].unique(),5,2364))
+r_df = pd.DataFrame(index=data_hour.index,columns=np.insert(weather_full["heightAboveSea"].unique(),5,2364))
 
 for height in pres_df.columns:
     pres_df[height] = weather_full[weather_full["heightAboveSea"] == height]["pres"]
     t_df[height] = weather_full[weather_full["heightAboveSea"] == height]["t"]
     r_df[height] = weather_full[weather_full["heightAboveSea"] == height]["r"]
     
+for i in range(len(pres_df.index)):
+    pres_df.iloc[i,5] = np.interp(x=pres_df.columns[5],xp = [2000,2500],fp = pres_df.iloc[i,[4,6]])
+    t_df.iloc[i,5] = np.interp(x=t_df.columns[5],xp = [2000,2500],fp = t_df.iloc[i,[4,6]])
+    r_df.iloc[i,5] = np.interp(x=r_df.columns[5],xp = [2000,2500],fp = r_df.iloc[i,[4,6]])
+    
+pres_df.drop(pres_df.columns[0:5],axis=1,inplace=True)
+t_df.drop(t_df.columns[0:5],axis=1,inplace=True)
+r_df.drop(r_df.columns[0:5],axis=1,inplace=True)
+   
 #Juntamos presión y temperatura, que son los más interesantes, y hacemos PCA
-pca = PCA(n_components=306)
+pca = PCA(n_components=302)
 combined_df = pd.concat([pres_df, t_df], axis=1)
 combined_df.dropna(inplace=True,axis=1)
 pca_result = pca.fit_transform(combined_df)
