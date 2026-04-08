@@ -59,17 +59,43 @@ combined_df = pd.concat([pres_df, t_df], axis=1)
 combined_df.dropna(inplace=True,axis=1)
 pca_result = pca.fit_transform(combined_df)
 
+#Para buscar la relación entre las componentes principales y los datos originales.
+loadings = pd.DataFrame(
+    pca.components_,
+    columns=combined_df.columns,
+    index=[f"PC{i+1}" for i in range(pca.n_components_)]
+)
+
+#Distingue entre presión y temperatura para poder hacer la comparación posteriormente
+loadings.loc[-1] = ["P" if i < 151 else "T" for i in range(len(loadings))]
+
+index_top = []
 suma = 0
-for i in range(15):
+for i in range(len(pca.explained_variance_ratio_)):
+    if pca.explained_variance_ratio_[i] < 0.001: #Límite de varianza explicada para considerar la componente principal relevante
+        break
     #fig = plt.figure(i+1)
     #ax = plt.gca()
     reg = LinearRegression().fit(pca_result[:,i].reshape(-1,1),data_hour.top/data_hour["top"].mean())
-    print(reg.score(pca_result[:,i].reshape(-1,1),data_hour.top/data_hour["top"].mean()))
-    print(reg.coef_)
+    r_squared = reg.score(pca_result[:,i].reshape(-1,1),data_hour.top/data_hour["top"].mean())
+    #print(r_squared)
+    #print(reg.coef_)
     #plt.plot(pca_result[:,i],data_hour.top/data_hour["top"].mean(),".")
     #plt.plot(pca_result[:,i],reg.coef_*pca_result[:,i]+1)
-    suma += reg.coef_*pca_result[:,i]
- 
+    if r_squared > 0.01: #Límite de R^2 para considerar la relación entre la componente principal y el conteo de partículas relevante
+        suma += reg.coef_*pca_result[:,i]
+        index_top.append(i)
+
+r_squared_top = []
+score_top = []
+for i in range(302):
+    reg = LinearRegression().fit(pca_result[:,i].reshape(-1,1),data_hour.top/data_hour["top"].mean())
+    r_squared_top.append(reg.score(pca_result[:,i].reshape(-1,1),data_hour.top/data_hour["top"].mean()))
+    score_top.append(reg.coef_[0])
+    
+scoef_top = np.vstack((r_squared_top,score_top,pca.explained_variance_ratio_)).T
+scoef_top = pd.DataFrame(scoef_top, columns=["R_squared","Score","Explained_Variance_Ratio"])
+    
 top_new = data_hour["top"]-(data_hour["top"].mean()*suma)       
 fig = plt.figure(10)
 ax = plt.gca()
@@ -79,19 +105,36 @@ ax.xaxis.set_major_formatter(xd)
 ax.set(ylabel="Relative counts", title="Comparación top original vs top corregido")
 plt.plot(pres_df.index,data_hour["top"]/data_hour["top"].mean(),"r")
 plt.plot(pres_df.index,top_new/top_new.mean(),"b")
-ax.legend(["top original", "top corregido"])
+plt.hlines(1, pres_df.index[0], pres_df.index[-1], colors="k", linestyles="dashed")
+ax.legend(["top original", "top corregido", "Media"])
 
+index_bottom = []
 suma = 0
-for i in range(15):
+for i in range(len(pca.explained_variance_ratio_)):
+    if pca.explained_variance_ratio_[i] < 0.001:
+        break
     #fig = plt.figure(i+1)
     #ax = plt.gca()
     reg = LinearRegression().fit(pca_result[:,i].reshape(-1,1),data_hour.bottom/data_hour["bottom"].mean())
-    print(reg.score(pca_result[:,i].reshape(-1,1),data_hour.bottom/data_hour["bottom"].mean()))
-    print(reg.coef_)
+    r_squared = reg.score(pca_result[:,i].reshape(-1,1),data_hour.bottom/data_hour["bottom"].mean())
+    #print(r_squared)
+    #print(reg.coef_)
     #plt.plot(pca_result[:,i],data_hour.top/data_hour["top"].mean(),".")
     #plt.plot(pca_result[:,i],reg.coef_*pca_result[:,i]+1)
-    suma += reg.coef_*pca_result[:,i]
- 
+    if r_squared > 0.01:
+        suma += reg.coef_*pca_result[:,i]
+        index_bottom.append(i)
+    
+r_squared_bottom = []
+score_bottom = []
+for i in range(302):
+    reg = LinearRegression().fit(pca_result[:,i].reshape(-1,1),data_hour.bottom/data_hour["bottom"].mean())
+    r_squared_bottom.append(reg.score(pca_result[:,i].reshape(-1,1),data_hour.bottom/data_hour["bottom"].mean()))
+    score_bottom.append(reg.coef_[0])
+    
+scoef_bottom = np.vstack((r_squared_bottom,score_bottom,pca.explained_variance_ratio_)).T
+scoef_bottom = pd.DataFrame(scoef_bottom, columns=["R_squared","Score","Explained_Variance_Ratio"])
+
 bottom_new = data_hour["bottom"]-(data_hour["bottom"].mean()*suma)       
 fig = plt.figure(11)
 ax = plt.gca()
@@ -101,4 +144,78 @@ ax.xaxis.set_major_formatter(xd)
 ax.set(ylabel="Relative counts", title="Comparación bottom original vs bottom corregido")
 plt.plot(pres_df.index,data_hour["bottom"]/data_hour["bottom"].mean(),"r")
 plt.plot(pres_df.index,bottom_new/bottom_new.mean(),"b")
-ax.legend(["bottom original", "bottom corregido"])
+plt.hlines(1, pres_df.index[0], pres_df.index[-1], colors="k", linestyles="dashed")
+ax.legend(["bottom original", "bottom corregido", "Media"])
+
+index_coin8 = []
+suma = 0
+for i in range(len(pca.explained_variance_ratio_)):
+    if pca.explained_variance_ratio_[i] < 0.001: #Límite de varianza explicada para considerar la componente principal relevante
+        break
+    #fig = plt.figure(i+1)
+    #ax = plt.gca()
+    reg = LinearRegression().fit(pca_result[:,i].reshape(-1,1),data_hour.c8/data_hour["c8"].mean())
+    r_squared = reg.score(pca_result[:,i].reshape(-1,1),data_hour.c8/data_hour["c8"].mean())
+    #print(r_squared)
+    #print(reg.coef_)
+    #plt.plot(pca_result[:,i],data_hour.top/data_hour["top"].mean(),".")
+    #plt.plot(pca_result[:,i],reg.coef_*pca_result[:,i]+1)
+    if r_squared > 0.01: #Límite de R^2 para considerar la relación entre la componente principal y el conteo de partículas relevante
+        suma += reg.coef_*pca_result[:,i]
+        index_coin8.append(i)
+
+r_squared_coin8 = []
+score_coin8 = []
+for i in range(302):
+    reg = LinearRegression().fit(pca_result[:,i].reshape(-1,1),data_hour.c8/data_hour["c8"].mean())
+    r_squared_coin8.append(reg.score(pca_result[:,i].reshape(-1,1),data_hour.c8/data_hour["c8"].mean()))
+    score_coin8.append(reg.coef_[0])
+    
+scoef_coin8 = np.vstack((r_squared_coin8,score_coin8,pca.explained_variance_ratio_)).T
+scoef_coin8 = pd.DataFrame(scoef_coin8, columns=["R_squared","Score","Explained_Variance_Ratio"])
+    
+coin8_new = data_hour["c8"]-(data_hour["c8"].mean()*suma)       
+fig = plt.figure(12)
+ax = plt.gca()
+plt.subplots_adjust(bottom=0.2)
+plt.xticks(rotation=80)
+ax.xaxis.set_major_formatter(xd)
+ax.set(ylabel="Relative counts", title="Comparación c8 original vs c8 corregido")
+plt.plot(pres_df.index,data_hour["c8"]/data_hour["c8"].mean(),"r")
+plt.plot(pres_df.index,coin8_new/coin8_new.mean(),"b")
+plt.hlines(1, pres_df.index[0], pres_df.index[-1], colors="k", linestyles="dashed")
+ax.legend(["c8 original", "c8 corregido", "Media"])
+
+for i in range(len(index_top)):
+    fig = plt.figure(20+i)
+    ax = plt.gca()
+    sns.scatterplot(x = loadings.iloc[index_top[i]].index, y = loadings.iloc[index_top[i]],hue=loadings.loc[-1],palette={"P":"b","T":"r"})
+    ax.set_title(f"Loadings PC{index_top[i]+1} - top")
+    ax.set_xlabel("Height (m)")
+    ax.set_ylabel("Loading")
+
+for i in range(len(index_bottom)):
+    fig = plt.figure(40+i)
+    ax = plt.gca()
+    sns.scatterplot(x = loadings.iloc[index_bottom[i]].index, y = loadings.iloc[index_bottom[i]],hue=loadings.loc[-1],palette={"P":"b","T":"r"})
+    ax = plt.gca()
+    ax.set_title(f"Loadings PC{index_bottom[i]+1} - bottom")
+    ax.set_xlabel("Height (m)")
+    ax.set_ylabel("Loading")
+    
+for i in range(len(index_coin8)):
+    fig = plt.figure(60+i)
+    ax = plt.gca()
+    sns.scatterplot(x = loadings.iloc[index_coin8[i]].index, y = loadings.iloc[index_coin8[i]],hue=loadings.loc[-1],palette={"P":"b","T":"r"})
+    ax = plt.gca()
+    ax.set_title(f"Loadings PC{index_coin8[i]+1} - coin8")
+    ax.set_xlabel("Height (m)")
+    ax.set_ylabel("Loading")
+
+#fig = plt.figure(12)
+#ax = plt.gca()
+#sns.pairplot(data = scoef_top, x_vars=scoef_top["Score"], y_vars=scoef_top["R_squared"], height=5, aspect=0.7)
+
+#fig = plt.figure(13)
+#ax = plt.gca()
+#sns.pairplot(data = scoef_bottom, x_vars=scoef_bottom["Score"], y_vars=scoef_bottom["R_squared"], height=5, aspect=0.7)
