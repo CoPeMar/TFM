@@ -1,9 +1,13 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import matplotlib.dates as md
+from matplotlib.lines import Line2D
 import numpy as np
 import seaborn as sns
 import dateutil
+from datetime import datetime
+from copy import copy
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression
 
@@ -24,6 +28,27 @@ weather_full.drop(["fecha","hora","time"],axis=1,inplace=True)
 data_hour = data.resample("60min").mean()
 xd = md.DateFormatter("%Y-%m-%d %H:%M:%S")
 data_hour.dropna(inplace=True,axis=0,subset=["top","bottom","c8"])
+#Fechas de eventos como FD, D o GLE. En parejas de comienzo y final.
+event_dates = ["2023-11-25 00:00:00","2023-12-04 00:00:00",
+              "2024-03-24 00:00:00","2024-04-01 00:00:00",
+              "2024-05-09 00:00:00","2024-05-31 00:00:00",
+              "2024-07-30 00:00:00","2024-08-06 00:00:00",
+              "2024-08-10 00:00:00","2024-08-15 00:00:00",
+              "2024-09-16 00:00:00","2024-09-22 00:00:00",
+              "2024-10-05 00:00:00","2024-10-17 00:00:00",
+              "2024-10-26 00:00:00","2024-11-08 00:00:00",
+              "2024-11-27 00:00:00","2024-12-04 00:00:00",
+              "2024-12-22 00:00:00","2025-01-12 00:00:00",
+              "2025-01-30 00:00:00","2025-02-09 00:00:00"]
+
+#Creamos rectángulos para marcar los eventos en las gráficas. 
+#En este caso, se han marcado con un rectángulo rojo los eventos de tipo D,
+#azul los eventos de tipo FD y verde los eventos de tipo FD + GLE.
+event_rects = []
+for i in range(0, len(event_dates), 2):
+    color = 'red' if i == 16 or i == 20 else 'green' if i == 6 or i == 8 or i == 18 else 'blue'
+    label = 'D' if i == 16 or i == 20 else 'FD' if i == 6 or i == 8 or i == 18 else 'FD + GLE'
+    event_rects.append(mpatches.Rectangle((md.date2num(datetime.strptime(event_dates[i], "%Y-%m-%d %H:%M:%S")), 0.9), md.date2num(datetime.strptime(event_dates[i+1], "%Y-%m-%d %H:%M:%S")) - md.date2num(datetime.strptime(event_dates[i], "%Y-%m-%d %H:%M:%S")), 0.3, color=color, alpha=0.3, label=label))
 
 #Realizamos la media de los datos a lo largo de toda la altura para poder hacer la comparación
 #weather_avg = weather_full.groupby(weather_full.index).mean()
@@ -69,10 +94,16 @@ loadings = pd.DataFrame(
 #Distingue entre presión y temperatura para poder hacer la comparación posteriormente
 loadings.loc[-1] = ["P" if i < 151 else "T" for i in range(len(loadings))]
 
+#Escogemos los componentes principales a usar según su varianza explicada y su relación
+#con los datos de conteo. Para esto, se ha establecido un límite de varianza explicada 
+#del 1% y un límite de R^2 del 0.02 para considerar la relación entre la componente 
+#principal y el conteo de partículas relevante. Se han guardado los índices de las 
+#componentes principales relevantes para cada tipo de conteo (top, bottom y c8) para 
+#poder hacer la comparación posteriormente.
 index_top = []
 suma = 0
 for i in range(len(pca.explained_variance_ratio_)):
-    if pca.explained_variance_ratio_[i] < 0.001: #Límite de varianza explicada para considerar la componente principal relevante
+    if pca.explained_variance_ratio_[i] < 0.01: #Límite de varianza explicada para considerar la componente principal relevante
         break
     #fig = plt.figure(i+1)
     #ax = plt.gca()
@@ -82,7 +113,7 @@ for i in range(len(pca.explained_variance_ratio_)):
     #print(reg.coef_)
     #plt.plot(pca_result[:,i],data_hour.top/data_hour["top"].mean(),".")
     #plt.plot(pca_result[:,i],reg.coef_*pca_result[:,i]+1)
-    if r_squared > 0.01: #Límite de R^2 para considerar la relación entre la componente principal y el conteo de partículas relevante
+    if r_squared > 0.02: #Límite de R^2 para considerar la relación entre la componente principal y el conteo de partículas relevante
         suma += reg.coef_*pca_result[:,i]
         index_top.append(i)
 
@@ -106,12 +137,21 @@ ax.set(ylabel="Relative counts", title="Comparación top original vs top corregi
 plt.plot(pres_df.index,data_hour["top"]/data_hour["top"].mean(),"r")
 plt.plot(pres_df.index,top_new/top_new.mean(),"b")
 plt.hlines(1, pres_df.index[0], pres_df.index[-1], colors="k", linestyles="dashed")
-ax.legend(["top original", "top corregido", "Media"])
+legend_elements = [Line2D([0], [0], color='r', label='top original'),
+                   Line2D([0], [0], color='b', label='top corregido'),
+                   Line2D([0], [0], color='k', linestyle='dashed', label='Media'),
+                   mpatches.Patch(color='red', alpha=0.3, label='D'),
+                   mpatches.Patch(color='blue', alpha=0.3, label='FD'),
+                   mpatches.Patch(color='green', alpha=0.3, label='FD + GLE')]
+ax.legend(handles=legend_elements, loc='lower left')
+for i in event_rects:
+    rect = copy(i)
+    ax.add_patch(rect)
 
 index_bottom = []
 suma = 0
 for i in range(len(pca.explained_variance_ratio_)):
-    if pca.explained_variance_ratio_[i] < 0.001:
+    if pca.explained_variance_ratio_[i] < 0.01:
         break
     #fig = plt.figure(i+1)
     #ax = plt.gca()
@@ -121,7 +161,7 @@ for i in range(len(pca.explained_variance_ratio_)):
     #print(reg.coef_)
     #plt.plot(pca_result[:,i],data_hour.top/data_hour["top"].mean(),".")
     #plt.plot(pca_result[:,i],reg.coef_*pca_result[:,i]+1)
-    if r_squared > 0.01:
+    if r_squared > 0.02:
         suma += reg.coef_*pca_result[:,i]
         index_bottom.append(i)
     
@@ -145,12 +185,21 @@ ax.set(ylabel="Relative counts", title="Comparación bottom original vs bottom c
 plt.plot(pres_df.index,data_hour["bottom"]/data_hour["bottom"].mean(),"r")
 plt.plot(pres_df.index,bottom_new/bottom_new.mean(),"b")
 plt.hlines(1, pres_df.index[0], pres_df.index[-1], colors="k", linestyles="dashed")
-ax.legend(["bottom original", "bottom corregido", "Media"])
+legend_elements = [Line2D([0], [0], color='r', label='bottom original'),
+                   Line2D([0], [0], color='b', label='bottom corregido'),
+                   Line2D([0], [0], color='k', linestyle='dashed', label='Media'),
+                   mpatches.Patch(color='red', alpha=0.3, label='D'),
+                   mpatches.Patch(color='blue', alpha=0.3, label='FD'),
+                   mpatches.Patch(color='green', alpha=0.3, label='FD + GLE')]
+ax.legend(handles=legend_elements, loc='lower left')
+for i in event_rects:
+    rect = copy(i)
+    ax.add_patch(rect)
 
 index_coin8 = []
 suma = 0
 for i in range(len(pca.explained_variance_ratio_)):
-    if pca.explained_variance_ratio_[i] < 0.001: #Límite de varianza explicada para considerar la componente principal relevante
+    if pca.explained_variance_ratio_[i] < 0.01: #Límite de varianza explicada para considerar la componente principal relevante
         break
     #fig = plt.figure(i+1)
     #ax = plt.gca()
@@ -160,7 +209,7 @@ for i in range(len(pca.explained_variance_ratio_)):
     #print(reg.coef_)
     #plt.plot(pca_result[:,i],data_hour.top/data_hour["top"].mean(),".")
     #plt.plot(pca_result[:,i],reg.coef_*pca_result[:,i]+1)
-    if r_squared > 0.01: #Límite de R^2 para considerar la relación entre la componente principal y el conteo de partículas relevante
+    if r_squared > 0.02: #Límite de R^2 para considerar la relación entre la componente principal y el conteo de partículas relevante
         suma += reg.coef_*pca_result[:,i]
         index_coin8.append(i)
 
@@ -184,7 +233,16 @@ ax.set(ylabel="Relative counts", title="Comparación c8 original vs c8 corregido
 plt.plot(pres_df.index,data_hour["c8"]/data_hour["c8"].mean(),"r")
 plt.plot(pres_df.index,coin8_new/coin8_new.mean(),"b")
 plt.hlines(1, pres_df.index[0], pres_df.index[-1], colors="k", linestyles="dashed")
-ax.legend(["c8 original", "c8 corregido", "Media"])
+legend_elements = [Line2D([0], [0], color='r', label='c8 original'),
+                   Line2D([0], [0], color='b', label='c8 corregido'),
+                   Line2D([0], [0], color='k', linestyle='dashed', label='Media'),
+                   mpatches.Patch(color='red', alpha=0.3, label='D'),
+                   mpatches.Patch(color='blue', alpha=0.3, label='FD'),
+                   mpatches.Patch(color='green', alpha=0.3, label='FD + GLE')]
+ax.legend(handles=legend_elements, loc='lower left')
+for i in event_rects:
+    rect = copy(i)
+    ax.add_patch(rect)
 
 for i in range(len(index_top)):
     fig = plt.figure(20+i)
