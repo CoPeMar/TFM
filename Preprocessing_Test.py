@@ -10,6 +10,7 @@ from datetime import datetime
 from copy import copy
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import StandardScaler
 
 #Variables importantes
 r_squared_threshold = 0.01 #Límite de R^2 para considerar la relación entre la componente principal y el conteo de partículas relevante
@@ -82,11 +83,13 @@ pres_df.drop(pres_df.columns[0:5],axis=1,inplace=True)
 t_df.drop(t_df.columns[0:5],axis=1,inplace=True)
 r_df.drop(r_df.columns[0:5],axis=1,inplace=True)
    
-#Juntamos presión y temperatura, que son los más interesantes, y hacemos PCA
+#Juntamos presión y temperatura, que son los más interesantes, y hacemos PCA tras reescalar datos
+scaler = StandardScaler()
 pca = PCA(n_components=30)
 combined_df = pd.concat([pres_df, t_df], axis=1)
 combined_df.dropna(inplace=True,axis=1)
-pca_result = pca.fit_transform(combined_df)
+combined_df_Postscale = scaler.fit_transform(combined_df)
+pca_result = pca.fit_transform(combined_df_Postscale)
 
 #Para buscar la relación entre las componentes principales y los datos originales.
 loadings = pd.DataFrame(
@@ -138,8 +141,8 @@ plt.subplots_adjust(bottom=0.2)
 plt.xticks(rotation=80)
 ax.xaxis.set_major_formatter(xd)
 ax.set(ylabel="Relative counts", title="Comparación top original vs top corregido")
-plt.plot(pres_df.index,data_hour["top"]/data_hour["top"].mean(),"r")
-plt.plot(pres_df.index,top_new/top_new.mean(),"b")
+plt.plot(pres_df.index, data_hour["top"]/data_hour["top"].mean(), color='r')
+plt.plot(pres_df.index, top_new/top_new.mean(), color='b')
 plt.hlines(1, pres_df.index[0], pres_df.index[-1], colors="k", linestyles="dashed")
 legend_elements = [Line2D([0], [0], color='r', label='top original'),
                    Line2D([0], [0], color='b', label='top corregido'),
