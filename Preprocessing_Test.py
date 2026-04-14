@@ -13,8 +13,9 @@ from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 
 #Variables importantes
-r_squared_threshold = 0.01 #Límite de R^2 para considerar la relación entre la componente principal y el conteo de partículas relevante
+r_squared_threshold = 0.1 #Límite de R^2 para considerar la relación entre la componente principal y el conteo de partículas relevante
 explained_variance_threshold = 0.01 #Límite de varianza explicada para considerar la componente principal relevante
+quiet_days_only = False #Si se quieren usar solo los días tranquilos para hacer la comparación, o si se quieren usar todos los datos.
 
 #Carga y organización de los datos
 data = pd.read_csv("C:/TFM_Data/Datos_CR_Full.csv")
@@ -23,6 +24,9 @@ weather2 = pd.read_csv("C:/TFM_Data/ERA5_Profiles/ERA5izo4icaro_20231024_2024040
 weather3 = pd.read_csv("C:/TFM_Data/ERA5_Profiles/ERA5izo4icaro_20240409_20250430/3cols/combined.csv")
 weather4 = pd.read_csv("C:/TFM_Data/ERA5_Profiles/ERA5izo4icaro_20250501_20250630/3cols/combined.csv")
 weather_full = pd.concat([weather1, weather2, weather3, weather4], ignore_index=True)
+#Eliminamos el mes de febrero, para el que no tenemos datos
+feb = np.linspace(1066464,1178519,num=1178520-1066464) 
+weather_full.drop(weather_full.index[feb],inplace=True)
 weather_full["time"] = weather_full["fecha"] + " " + weather_full["hora"]
 dates = [dateutil.parser.parse(s) for s in data._time_]
 weather_dates = [dateutil.parser.parse(s) for s in weather_full.time]
@@ -33,6 +37,29 @@ weather_full.drop(["fecha","hora","time"],axis=1,inplace=True)
 data_hour = data.resample("60min").mean()
 xd = md.DateFormatter("%Y-%m-%d %H:%M:%S")
 data_hour.dropna(inplace=True,axis=0,subset=["top","bottom","c8"])
+
+if quiet_days_only:
+    temp = pd.read_csv("C:/TFM_Data/Q_Days.txt")
+    Q_Days = pd.DataFrame()
+    Q_Days_2 = pd.DataFrame()
+    Q_data_hour = pd.DataFrame()
+    Q_weather_full = pd.DataFrame()
+    for i in temp.columns[2:]:
+        for j in temp.index:
+            Q_Days.loc[j,i] = f"{temp.iloc[j,0]}-{temp.iloc[j,1]}-{temp.loc[j,i]}"
+            
+    for i in Q_Days.columns:
+        for j in Q_Days.index:
+            Q_Days_2.loc[j,i] = datetime.strptime(Q_Days.loc[j,i], "%Y-%m-%d")
+    
+    for i in range(len(Q_Days)):
+        for j in range(len(Q_Days.columns)):
+            Q_weather_full = pd.concat([Q_weather_full,weather_full[weather_full.index.normalize() == pd.Timestamp(Q_Days_2.iloc[i,j])]])
+            Q_data_hour = pd.concat([Q_data_hour,data_hour[data_hour.index.normalize() == pd.Timestamp(Q_Days_2.iloc[i,j])]])
+            
+    weather_full = Q_weather_full
+    data_hour = Q_data_hour
+
 #Fechas de eventos como FD, D o GLE. En parejas de comienzo y final.
 event_dates = ["2023-11-25 00:00:00","2023-12-04 00:00:00",
               "2024-03-24 00:00:00","2024-04-01 00:00:00",
@@ -141,8 +168,12 @@ plt.subplots_adjust(bottom=0.2)
 plt.xticks(rotation=80)
 ax.xaxis.set_major_formatter(xd)
 ax.set(ylabel="Relative counts", title="Comparación top original vs top corregido")
-plt.plot(pres_df.index, data_hour["top"]/data_hour["top"].mean(), color='r')
-plt.plot(pres_df.index, top_new/top_new.mean(), color='b')
+if quiet_days_only:
+    sns.scatterplot(x=pres_df.index, y=data_hour["top"]/data_hour["top"].mean(), color='r',s=5)
+    sns.scatterplot(x=pres_df.index, y=top_new/top_new.mean(), color='b',s=5)
+else:
+    plt.plot(pres_df.index, data_hour["top"]/data_hour["top"].mean(), color='r')
+    plt.plot(pres_df.index, top_new/top_new.mean(), color='b')
 plt.hlines(1, pres_df.index[0], pres_df.index[-1], colors="k", linestyles="dashed")
 legend_elements = [Line2D([0], [0], color='r', label='top original'),
                    Line2D([0], [0], color='b', label='top corregido'),
@@ -189,8 +220,12 @@ plt.subplots_adjust(bottom=0.2)
 plt.xticks(rotation=80)
 ax.xaxis.set_major_formatter(xd)
 ax.set(ylabel="Relative counts", title="Comparación bottom original vs bottom corregido")
-plt.plot(pres_df.index,data_hour["bottom"]/data_hour["bottom"].mean(),"r")
-plt.plot(pres_df.index,bottom_new/bottom_new.mean(),"b")
+if quiet_days_only:
+    sns.scatterplot(x=pres_df.index, y=data_hour["bottom"]/data_hour["bottom"].mean(), color='r',s=5)
+    sns.scatterplot(x=pres_df.index, y=bottom_new/bottom_new.mean(), color='b',s=5)
+else:
+    plt.plot(pres_df.index,data_hour["bottom"]/data_hour["bottom"].mean(),"r")
+    plt.plot(pres_df.index,bottom_new/bottom_new.mean(),"b")
 plt.hlines(1, pres_df.index[0], pres_df.index[-1], colors="k", linestyles="dashed")
 legend_elements = [Line2D([0], [0], color='r', label='bottom original'),
                    Line2D([0], [0], color='b', label='bottom corregido'),
@@ -237,8 +272,12 @@ plt.subplots_adjust(bottom=0.2)
 plt.xticks(rotation=80)
 ax.xaxis.set_major_formatter(xd)
 ax.set(ylabel="Relative counts", title="Comparación c8 original vs c8 corregido")
-plt.plot(pres_df.index,data_hour["c8"]/data_hour["c8"].mean(),"r")
-plt.plot(pres_df.index,coin8_new/coin8_new.mean(),"b")
+if quiet_days_only:
+    sns.scatterplot(x=pres_df.index, y=data_hour["c8"]/data_hour["c8"].mean(), color='r', s=5)
+    sns.scatterplot(x=pres_df.index, y=coin8_new/coin8_new.mean(), color='b', s=5)
+else:
+    plt.plot(pres_df.index,data_hour["c8"]/data_hour["c8"].mean(),"r")
+    plt.plot(pres_df.index,coin8_new/coin8_new.mean(),"b")
 plt.hlines(1, pres_df.index[0], pres_df.index[-1], colors="k", linestyles="dashed")
 legend_elements = [Line2D([0], [0], color='r', label='c8 original'),
                    Line2D([0], [0], color='b', label='c8 corregido'),
