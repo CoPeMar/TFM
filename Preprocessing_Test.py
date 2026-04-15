@@ -13,7 +13,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 
 #Variables importantes
-r_squared_threshold = 0.1 #Límite de R^2 para considerar la relación entre la componente principal y el conteo de partículas relevante
+r_squared_threshold = 0.01 #Límite de R^2 para considerar la relación entre la componente principal y el conteo de partículas relevante
 explained_variance_threshold = 0.01 #Límite de varianza explicada para considerar la componente principal relevante
 quiet_days_only = False #Si se quieren usar solo los días tranquilos para hacer la comparación, o si se quieren usar todos los datos.
 
@@ -315,3 +315,39 @@ for i in range(len(index_coin8)):
     ax.set_title(f"Loadings PC{index_coin8[i]+1} - coin8")
     ax.set_xlabel("Height (m)")
     ax.set_ylabel("Loading")
+    
+test_cov = pd.concat([combined_df,data_hour[["top","bottom","c8"]],top_new,bottom_new,coin8_new],axis=1)
+corr = test_cov.corr(numeric_only=True)
+corr.drop(test_cov.columns[0:combined_df.shape[1]],axis=1,inplace=True)
+corr.drop(test_cov.columns[combined_df.shape[1]+3:],axis=0,inplace=True)
+corr.columns = ["top_original","bottom_original","c8_original","top_corregido","bottom_corregido","c8_corregido"]
+fig = plt.figure(100)
+ax = plt.gca()
+plt.plot(corr.index[:151],corr.top_original[:151],"b",label="top original, presión")
+plt.plot(corr.index[151:],corr.top_original[151:],"r",label="top original, temperatura")
+plt.plot(corr.index[:151],corr.top_corregido[:151],"b--",label="top corregido, presión")
+plt.plot(corr.index[151:],corr.top_corregido[151:],"r--",label="top corregido, temperatura")
+ax.set_xlabel("Height (m)")
+ax.set_ylabel("Correlation with top counts")
+ax.set_title(f"Correlation top. R^2 = {r_squared_threshold}")
+ax.legend()
+fig = plt.figure(101)
+ax = plt.gca()
+plt.plot(corr.index[:151],corr.bottom_original[:151],"b",label="bottom original, presión")
+plt.plot(corr.index[151:],corr.bottom_original[151:],"r",label="bottom original, temperatura")
+plt.plot(corr.index[:151],corr.bottom_corregido[:151],"b--",label="bottom corregido, presión")
+plt.plot(corr.index[151:],corr.bottom_corregido[151:],"r--",label="bottom corregido, temperatura")
+ax.set_xlabel("Height (m)")
+ax.set_ylabel("Correlation with bottom counts")
+ax.set_title(f"Correlation bottom. R^2 = {r_squared_threshold}")
+ax.legend()
+fig = plt.figure(102)
+ax = plt.gca()
+plt.plot(corr.index[:151],corr.c8_original[:151],"b",label="c8 original, presión")
+plt.plot(corr.index[151:],corr.c8_original[151:],"r",label="c8 original, temperatura")
+plt.plot(corr.index[:151],corr.c8_corregido[:151],"b--",label="c8 corregido, presión")
+plt.plot(corr.index[151:],corr.c8_corregido[151:],"r--",label="c8 corregido, temperatura")
+ax.set_xlabel("Height (m)")
+ax.set_ylabel("Correlation with c8 counts")
+ax.set_title(f"Correlation c8. R^2 = {r_squared_threshold}")
+ax.legend()
