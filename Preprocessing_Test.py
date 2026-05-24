@@ -18,11 +18,11 @@ explained_variance_threshold = 0.01 #Límite de varianza explicada para consider
 quiet_days_only = False #Si se quieren usar solo los días tranquilos para hacer la comparación, o si se quieren usar todos los datos.
 
 #Carga y organización de los datos
-data = pd.read_csv("C:/TFM_Data/Datos_CR_Full.csv")
-weather1 = pd.read_csv("C:/TFM_Data/ERA5_Profiles/ERA5izo4icaro_20230501_20231023/3cols/combined.csv")
-weather2 = pd.read_csv("C:/TFM_Data/ERA5_Profiles/ERA5izo4icaro_20231024_20240408/3cols/combined.csv")
-weather3 = pd.read_csv("C:/TFM_Data/ERA5_Profiles/ERA5izo4icaro_20240409_20250430/3cols/combined.csv")
-weather4 = pd.read_csv("C:/TFM_Data/ERA5_Profiles/ERA5izo4icaro_20250501_20250630/3cols/combined.csv")
+data = pd.read_csv("https://media.githubusercontent.com/media/CoPeMar/TFM/refs/heads/main/Datos_CR_Full.csv")
+weather1 = pd.read_csv("https://media.githubusercontent.com/media/CoPeMar/TFM/refs/heads/main/combined1.csv")
+weather2 = pd.read_csv("https://media.githubusercontent.com/media/CoPeMar/TFM/refs/heads/main/combined2.csv")
+weather3 = pd.read_csv("https://media.githubusercontent.com/media/CoPeMar/TFM/refs/heads/main/combined3.csv")
+weather4 = pd.read_csv("https://media.githubusercontent.com/media/CoPeMar/TFM/refs/heads/main/combined4.csv")
 weather_full = pd.concat([weather1, weather2, weather3, weather4], ignore_index=True)
 #Eliminamos el mes de febrero, para el que no tenemos datos
 feb = np.linspace(1066464,1178519,num=1178520-1066464) 
@@ -185,6 +185,8 @@ ax.legend(handles=legend_elements, loc='lower left')
 for i in event_rects:
     rect = copy(i)
     ax.add_patch(rect)
+    
+plt.ylim(0.8,1.22)
 
 index_bottom = []
 suma = 0
@@ -237,6 +239,8 @@ ax.legend(handles=legend_elements, loc='lower left')
 for i in event_rects:
     rect = copy(i)
     ax.add_patch(rect)
+    
+plt.ylim(0.8,1.22)
 
 index_coin8 = []
 suma = 0
@@ -289,6 +293,8 @@ ax.legend(handles=legend_elements, loc='lower left')
 for i in event_rects:
     rect = copy(i)
     ax.add_patch(rect)
+    
+plt.ylim(0.8,1.22)
 
 for i in range(len(index_top)):
     fig = plt.figure(20+i)
