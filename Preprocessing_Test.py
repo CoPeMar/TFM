@@ -17,6 +17,27 @@ r_squared_threshold = 0.01 #Límite de R^2 para considerar la relación entre la
 explained_variance_threshold = 0.01 #Límite de varianza explicada para considerar la componente principal relevante
 quiet_days_only = False #Si se quieren usar solo los días tranquilos para hacer la comparación, o si se quieren usar todos los datos.
 lowest_pressure_only = False #Si se quieren usar solo los datos de presión más bajos para hacer la comparación, o si se quieren usar todos los datos.
+Test_neural_network = True #Predicción de PCA usando los datos de muones sin corregir
+
+#Funciones útiles
+def plot_loss(history):
+  plt.plot(history.history['loss'])
+  plt.plot(history.history['val_loss'])
+  plt.title('Model loss')
+  plt.ylabel('Loss')
+  plt.xlabel('Epoch')
+  plt.legend(['Train', 'Test'], loc='upper right')
+  plt.show()
+  
+def plot_predict(observed, predicted):
+  plt.figure(figsize=(20, 10))
+  plt.plot(observed)
+  plt.plot(predicted, linestyle="dashed")
+  #plt.title('Observation vr. prediction')
+  plt.ylabel('Muon counts')
+  plt.xlabel('Index')
+  plt.legend(['Observed', 'Predicted'], loc='upper right')
+  plt.show()
 
 #Carga y organización de los datos
 data = pd.read_csv("https://media.githubusercontent.com/media/CoPeMar/TFM/refs/heads/main/Datos_CR_Full.csv")
@@ -372,3 +393,83 @@ ax.set_xlabel("Height (m)")
 ax.set_ylabel("Correlation with c8 counts")
 ax.set_title(f"Correlation c8. R^2 = {r_squared_threshold}")
 ax.legend()
+
+if Test_neural_network:
+    from sklearn.metrics import root_mean_squared_error
+    import tensorflow as tf
+    import tensorflow.keras as keras
+    from tensorflow.keras.models import Model
+    from tensorflow.keras.models import Sequential
+    from tensorflow.keras.layers import *
+    from sklearn.model_selection import train_test_split
+    from sklearn.preprocessing import MinMaxScaler
+
+    from scipy.stats import pearsonr
+    
+    from sklearn.metrics import accuracy_score
+    
+    #División de datos
+    X = pca_result[:,index_top]
+    y = data_hour["top"]
+    x_train,x_test,y_train,y_test = train_test_split(X,y,test_size=0.2,random_state=42)
+    scalerY = MinMaxScaler()
+    y_train = scalerY.fit_transform(y_train.values.reshape(-1,1))
+    y_test = scalerY.transform(y_test.values.reshape(-1,1))
+    
+    #Parámetros de la red neuronal
+    epochs = 100
+    batch_size = 32
+    dropout = 0.2
+    optimizer = "adam"
+    activation = "relu"
+    
+    #Red neuronal
+    model = Sequential()
+    model.add(keras.Input(shape=(len(index_top),)))
+    model.add(Dense(64, activation=activation))
+    model.add(Dense(32, activation=activation))
+    model.add(Dropout(dropout))
+    model.add(Dense(1, activation='linear'))
+    model.compile(optimizer=optimizer, loss='mean_squared_error')
+    
+    #Entrenamiento de la red neuronal
+    history = model.fit(x_train, y_train, epochs=epochs, batch_size=batch_size, validation_data=(x_test, y_test), verbose=0)
+    fig = plt.figure(200)
+    ax = plt.gca()
+    plot_loss(history)
+    
+    model_predictions = model.predict(X).flatten()
+    model_predictions = scalerY.inverse_transform(model_predictions.reshape(-1,1)).flatten()
+    rmse = root_mean_squared_error(data_hour["top"], model_predictions)
+    pearson_corr, _ = pearsonr(data_hour["top"], model_predictions)
+    
+    plot_df = pd.DataFrame({"Observed": data_hour["top"], "Predicted": model_predictions})
+
+    plot_predict(plot_df["Observed"], plot_df["Predicted"])
+    print(f"RMSE: {rmse}")
+    print(f"Pearson correlation: {pearson_corr}")
+    
+    #Predicción inversa?
+    model_2 = Sequential()
+    model_2.add(keras.Input(shape=(1,)))
+    model_2.add(Dense(64, activation=activation))
+    model_2.add(Dense(64, activation=activation))
+    model_2.add(Dropout(dropout))
+    model_2.add(Dense(len(index_top), activation='linear'))
+    model_2.compile(optimizer=optimizer, loss='mean_squared_error')
+    
+    history_2 = model_2.fit(y_train, x_train, epochs=epochs, batch_size=batch_size, validation_data=(y_test, x_test), verbose=0)
+    fig = plt.figure(201)
+    ax = plt.gca()
+    plot_loss(history_2)
+    
+    model_predictions_2 = model_2.predict(y).reshape(-1, len(index_top))
+    rmse_2 = root_mean_squared_error(X, model_predictions_2)
+    pearson_corr_2, _ = pearsonr(X.flatten(), model_predictions_2.flatten())
+    
+    plot_df_2 = pd.DataFrame(model_predictions_2, columns=[f"PC{index+1}" for index in index_top])
+    plot_predict(X.flatten(), model_predictions_2.flatten())
+    print(f"RMSE: {rmse_2}")
+    print(f"Pearson correlation: {pearson_corr_2}")
+    
+    #Que mala :/
