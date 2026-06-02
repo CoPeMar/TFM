@@ -4,16 +4,18 @@ import matplotlib.patches as mpatches
 import matplotlib.dates as md
 from matplotlib.lines import Line2D
 import numpy as np
+import random
+from pyparsing import col
 import seaborn as sns
 import dateutil
-from datetime import datetime
+from datetime import datetime, timedelta
 from copy import copy
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 
 #Variables importantes
-r_squared_threshold = 0.01 #Límite de R^2 para considerar la relación entre la componente principal y el conteo de partículas relevante
+r_squared_threshold = 0 #Límite de R^2 para considerar la relación entre la componente principal y el conteo de partículas relevante
 explained_variance_threshold = 0.01 #Límite de varianza explicada para considerar la componente principal relevante
 quiet_days_only = False #Si se quieren usar solo los días tranquilos para hacer la comparación, o si se quieren usar todos los datos.
 lowest_pressure_only = False #Si se quieren usar solo los datos de presión más bajos para hacer la comparación, o si se quieren usar todos los datos.
@@ -58,6 +60,10 @@ data.drop("_time_",axis=1,inplace=True)
 weather_full.drop(["fecha","hora","time"],axis=1,inplace=True)
 data_hour = data.resample("60min").mean()
 xd = md.DateFormatter("%Y-%m-%d %H:%M:%S")
+aux = data_hour[data_hour['top'] < 23000]
+dropper = aux[pd.to_datetime(1719792000,unit='s'):pd.to_datetime(1722384000,unit='s')].index #Julio
+for i in dropper:  
+    data_hour.loc[i,'top'] = random.randint(int(data_hour.loc[dropper[-1]+timedelta(hours=1),'top']),int(data_hour.loc[dropper[0]-timedelta(hours=2),'top'])) #Números aleatorios en rango creible
 data_hour.dropna(inplace=True,axis=0,subset=["top","bottom","c8"])
 
 if quiet_days_only:
@@ -438,38 +444,39 @@ if Test_neural_network:
     ax = plt.gca()
     plot_loss(history)
     
-    model_predictions = model.predict(X).flatten()
+    model_predictions = model.predict(x_test).flatten()
     model_predictions = scalerY.inverse_transform(model_predictions.reshape(-1,1)).flatten()
-    rmse = root_mean_squared_error(data_hour["top"], model_predictions)
-    pearson_corr, _ = pearsonr(data_hour["top"], model_predictions)
-    
-    plot_df = pd.DataFrame({"Observed": data_hour["top"], "Predicted": model_predictions})
+    y_test = scalerY.inverse_transform(y_test).flatten()
+    rmse = root_mean_squared_error(y_test, model_predictions)
+    pearson_corr, _ = pearsonr(y_test, model_predictions)
+
+    plot_df = pd.DataFrame({"Observed": y_test, "Predicted": model_predictions})
 
     plot_predict(plot_df["Observed"], plot_df["Predicted"])
     print(f"RMSE: {rmse}")
     print(f"Pearson correlation: {pearson_corr}")
     
     #Predicción inversa?
-    model_2 = Sequential()
-    model_2.add(keras.Input(shape=(1,)))
-    model_2.add(Dense(64, activation=activation))
-    model_2.add(Dense(64, activation=activation))
-    model_2.add(Dropout(dropout))
-    model_2.add(Dense(len(index_top), activation='linear'))
-    model_2.compile(optimizer=optimizer, loss='mean_squared_error')
+    #model_2 = Sequential()
+    #model_2.add(keras.Input(shape=(1,)))
+    #model_2.add(Dense(64, activation=activation))
+    #model_2.add(Dense(64, activation=activation))
+    #model_2.add(Dropout(dropout))
+    #model_2.add(Dense(len(index_top), activation='linear'))
+    #model_2.compile(optimizer=optimizer, loss='mean_squared_error')
     
-    history_2 = model_2.fit(y_train, x_train, epochs=epochs, batch_size=batch_size, validation_data=(y_test, x_test), verbose=0)
-    fig = plt.figure(201)
-    ax = plt.gca()
-    plot_loss(history_2)
+    #history_2 = model_2.fit(y_train, x_train, epochs=epochs, batch_size=batch_size, validation_data=(y_test, x_test), verbose=0)
+    #fig = plt.figure(201)
+    #ax = plt.gca()
+    #plot_loss(history_2)
     
-    model_predictions_2 = model_2.predict(y).reshape(-1, len(index_top))
-    rmse_2 = root_mean_squared_error(X, model_predictions_2)
-    pearson_corr_2, _ = pearsonr(X.flatten(), model_predictions_2.flatten())
+    #model_predictions_2 = model_2.predict(y).reshape(-1, len(index_top))
+    #rmse_2 = root_mean_squared_error(X, model_predictions_2)
+    #pearson_corr_2, _ = pearsonr(X.flatten(), model_predictions_2.flatten())
     
-    plot_df_2 = pd.DataFrame(model_predictions_2, columns=[f"PC{index+1}" for index in index_top])
-    plot_predict(X.flatten(), model_predictions_2.flatten())
-    print(f"RMSE: {rmse_2}")
-    print(f"Pearson correlation: {pearson_corr_2}")
+    #plot_df_2 = pd.DataFrame(model_predictions_2, columns=[f"PC{index+1}" for index in index_top])
+    #plot_predict(X.flatten(), model_predictions_2.flatten())
+    #print(f"RMSE: {rmse_2}")
+    #print(f"Pearson correlation: {pearson_corr_2}")
     
     #Que mala :/
