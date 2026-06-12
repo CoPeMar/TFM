@@ -26,49 +26,23 @@ quiet_days_only = False #Si se quieren usar solo los días tranquilos para hacer
 lowest_pressure_only = False #Si se quieren usar solo los datos de presión más bajos 
                              #para hacer la comparación, o si se quieren usar todos 
                              #los datos.
+include_humidity = True #Si se quiere incluir la humedad en el PCA o no
 Test_neural_network = False #Predicción de PCA usando los datos de muones sin corregir
 
-#Carga y organización de los datos
-data = pd.read_csv("https://media.githubusercontent.com/media/CoPeMar/TFM/refs/heads/main/Datos_CR_Full.csv")
-weather1 = pd.read_csv("https://media.githubusercontent.com/media/CoPeMar/TFM/refs/heads/main/combined1.csv")
-weather2 = pd.read_csv("https://media.githubusercontent.com/media/CoPeMar/TFM/refs/heads/main/combined2.csv")
-weather3 = pd.read_csv("https://media.githubusercontent.com/media/CoPeMar/TFM/refs/heads/main/combined3.csv")
-weather4 = pd.read_csv("https://media.githubusercontent.com/media/CoPeMar/TFM/refs/heads/main/combined4.csv")
-weather_full = pd.concat([weather1, weather2, weather3, weather4], ignore_index=True)
-#Eliminamos el mes de febrero, para el que no tenemos datos
-feb = np.linspace(1066464,1178519,num=1178520-1066464) 
-weather_full.drop(weather_full.index[feb],inplace=True)
+header_1=np.append([2364],np.linspace(2500,77000,150))
+header=np.append(header_1,[header_1,header_1])
+combined_df = pd.read_csv("https://media.githubusercontent.com/media/CoPeMar/TFM/refs/heads/main/combined_df.csv",
+                          parse_dates=True, index_col=0,) #Datos atmosféricos
+combined_df.columns = header
+data_hour = pd.read_csv("https://media.githubusercontent.com/media/CoPeMar/TFM/refs/heads/main/data_hour.csv",
+                          parse_dates=True, index_col=0) #Datos de conteo de partículas
 
-#Añadimos DatetimeIndex a ambos dataframes
-weather_full["time"] = weather_full["fecha"] + " " + weather_full["hora"]
-dates = [dateutil.parser.parse(s) for s in data._time_]
-weather_dates = [dateutil.parser.parse(s) for s in weather_full.time]
-weather_full.index = weather_dates
-data.index = dates
-data.drop("_time_",axis=1,inplace=True)
-weather_full.drop(["fecha","hora","time"],axis=1,inplace=True)
-
-#Resampling de los datos de muones
-data_hour = data.resample("60min").mean()
 xd = md.DateFormatter("%Y-%m-%d %H:%M:%S")
-
-#Generación de valores aleatorios para rellenar gaps
-aux = data_hour[data_hour['top'] < 23000]
-dropper = aux[pd.to_datetime(1719792000,unit='s'):
-              pd.to_datetime(1722384000,unit='s')].index #Julio
-for i in dropper:  #Números aleatorios en rango creible
-    data_hour.loc[i,'top'] = random.randint(int(data_hour.loc[dropper[-1]+
-                                            timedelta(hours=1),'top']),
-                                            int(data_hour.loc[dropper[0]-
-                                            timedelta(hours=2),'top'])) 
-data_hour.dropna(inplace=True,axis=0,subset=["top","bottom","c8"])
 
 if quiet_days_only:
     temp = pd.read_csv("C:/TFM_Data/Q_Days.txt")
     Q_Days = pd.DataFrame()
     Q_Days_2 = pd.DataFrame()
-    Q_data_hour = pd.DataFrame()
-    Q_weather_full = pd.DataFrame()
     for i in temp.columns[2:]:
         for j in temp.index:
             Q_Days.loc[j,i] = f"{temp.iloc[j,0]}-{temp.iloc[j,1]}-{temp.loc[j,i]}"
@@ -76,17 +50,14 @@ if quiet_days_only:
     for i in Q_Days.columns:
         for j in Q_Days.index:
             Q_Days_2.loc[j,i] = datetime.strptime(Q_Days.loc[j,i], "%Y-%m-%d")
-    
-    for i in range(len(Q_Days)):
-        for j in range(len(Q_Days.columns)):
-            Q_weather_full = pd.concat([Q_weather_full,weather_full
-                                       [weather_full.index.normalize() == 
-                                        pd.Timestamp(Q_Days_2.iloc[i,j])]])
-            Q_data_hour = pd.concat([Q_data_hour,data_hour[data_hour.index.normalize() 
-                                    == pd.Timestamp(Q_Days_2.iloc[i,j])]])
             
-    weather_full = Q_weather_full
-    data_hour = Q_data_hour
+    nn = Q_Days_2.to_numpy().flatten()
+    nn = pd.to_datetime(nn, format="%Y-%m-%d")
+    
+    combined_df.drop(combined_df.index[~np.isin(combined_df.index.normalize(),nn)],
+                      inplace=True,axis=0)
+    data_hour.drop(data_hour.index[~np.isin(data_hour.index.normalize(),nn)],
+                      inplace=True,axis=0)
 
 #Fechas de eventos como FD, D o GLE. En parejas de comienzo y final.
 event_dates = ["2023-11-25 00:00:00","2023-12-04 00:00:00",
@@ -113,43 +84,15 @@ for i in range(0, len(event_dates), 2):
                       (datetime.strptime(event_dates[i+1], "%Y-%m-%d %H:%M:%S")) - 
                       md.date2num(datetime.strptime(event_dates[i], "%Y-%m-%d %H:%M:%S")), 
                       0.3, color=color, alpha=0.3, label=label))
-
-#Creamos nuevos dataframes con los datos de presión, temperatura y humedad según su 
-#altura, para poder hacer la comparación con los datos de conteo
-pres_df = pd.DataFrame(index=data_hour.index,columns=
-                       np.insert(weather_full["heightAboveSea"].unique(),5,2364))
-t_df = pd.DataFrame(index=data_hour.index,columns=
-                       np.insert(weather_full["heightAboveSea"].unique(),5,2364))
-r_df = pd.DataFrame(index=data_hour.index,columns=
-                       np.insert(weather_full["heightAboveSea"].unique(),5,2364))
-
-for height in pres_df.columns:
-    pres_df[height] = weather_full[weather_full["heightAboveSea"] == height]["pres"]
-    t_df[height] = weather_full[weather_full["heightAboveSea"] == height]["t"]
-    r_df[height] = weather_full[weather_full["heightAboveSea"] == height]["r"]
-    
-#Creamos datos atmosféricos para la altitud del detector y eliminamos aquellos que se 
-#encuentren por debajo, por ser irrelevantes
-for i in range(len(pres_df.index)):
-    pres_df.iloc[i,5] = np.interp(x=pres_df.columns[5],xp = [2000,2500],
-                                  fp = pres_df.iloc[i,[4,6]])
-    t_df.iloc[i,5] = np.interp(x=t_df.columns[5],xp = [2000,2500],
-                                  fp = t_df.iloc[i,[4,6]])
-    r_df.iloc[i,5] = np.interp(x=r_df.columns[5],xp = [2000,2500],
-                                  fp = r_df.iloc[i,[4,6]])
-    
-pres_df.drop(pres_df.columns[0:5],axis=1,inplace=True)
-t_df.drop(t_df.columns[0:5],axis=1,inplace=True)
-r_df.drop(r_df.columns[0:5],axis=1,inplace=True)
    
-#Juntamos presión y temperatura, que son los más interesantes, y hacemos PCA tras 
-#reescalar datos
+#Hacemos PCA tras elegir y reescalar los datos
 scaler = StandardScaler()
 pca = PCA(n_components=30)
+
+if not include_humidity:
+    combined_df = combined_df.iloc[:,:302]
 if lowest_pressure_only:
-    combined_df = pd.concat([pres_df.iloc[:,0], t_df], axis=1)
-else:
-    combined_df = pd.concat([pres_df, t_df], axis=1)
+    combined_df = pd.concat([combined_df.iloc[:,0], combined_df.iloc[:,151:]], axis=1)
 combined_df.dropna(inplace=True,axis=1)
 combined_df_Postscale = scaler.fit_transform(combined_df)
 pca_result = pca.fit_transform(combined_df_Postscale)
@@ -163,16 +106,12 @@ loadings = pd.DataFrame(
 
 #Distingue entre presión y temperatura para poder hacer la comparación posteriormente
 if lowest_pressure_only:
-    loadings.loc[-1] = ["P" if i < 1 else "T" for i in range(len(loadings.T))]
+    loadings.loc[-1] = ["P" if i < 1 else "T" if i < 152 else "R" for i in range(len(loadings.T))]
 else:
-    loadings.loc[-1] = ["P" if i < 151 else "T" for i in range(len(loadings.T))]
+    loadings.loc[-1] = ["P" if i < 151 else "T" if i < 302 else "R" for i in range(len(loadings.T))]
 
 #Escogemos los componentes principales a usar según su varianza explicada y su relación
-#con los datos de conteo. Para esto, se ha establecido un límite de varianza explicada 
-#del 1% y un límite de R^2 del 0.02 para considerar la relación entre la componente 
-#principal y el conteo de partículas relevante. Se han guardado los índices de las 
-#componentes principales relevantes para cada tipo de conteo (top, bottom y c8) para 
-#poder hacer la comparación posteriormente.
+#con los datos de conteo.
 
 index_top, top_new, scoef_top = Functions.correction(pca, 
                                                      explained_variance_threshold, 
@@ -186,14 +125,14 @@ plt.xticks(rotation=80)
 ax.xaxis.set_major_formatter(xd)
 ax.set(ylabel="Relative counts", title="Comparación top original vs top corregido")
 if quiet_days_only:
-    sns.scatterplot(x=pres_df.index, y=data_hour["top"]/data_hour["top"].mean(), 
+    sns.scatterplot(x=combined_df.index, y=data_hour["top"]/data_hour["top"].mean(), 
                     color='r',s=5)
-    sns.scatterplot(x=pres_df.index, y=top_new/top_new.mean(), 
+    sns.scatterplot(x=combined_df.index, y=top_new/top_new.mean(), 
                     color='b',s=5)
 else:
-    plt.plot(pres_df.index, data_hour["top"]/data_hour["top"].mean(), color='r')
-    plt.plot(pres_df.index, top_new/top_new.mean(), color='b')
-plt.hlines(1, pres_df.index[0], pres_df.index[-1], colors="k", linestyles="dashed")
+    plt.plot(combined_df.index, data_hour["top"]/data_hour["top"].mean(), color='r')
+    plt.plot(combined_df.index, top_new/top_new.mean(), color='b')
+plt.hlines(1, combined_df.index[0], combined_df.index[-1], colors="k", linestyles="dashed")
 legend_elements = [Line2D([0], [0], color='r', label='top original'),
                    Line2D([0], [0], color='b', label='top corregido'),
                    Line2D([0], [0], color='k', linestyle='dashed', label='Media'),
@@ -219,14 +158,14 @@ plt.xticks(rotation=80)
 ax.xaxis.set_major_formatter(xd)
 ax.set(ylabel="Relative counts", title="Comparación bottom original vs bottom corregido")
 if quiet_days_only:
-    sns.scatterplot(x=pres_df.index, y=data_hour["bottom"]/data_hour["bottom"].mean(), 
+    sns.scatterplot(x=combined_df.index, y=data_hour["bottom"]/data_hour["bottom"].mean(), 
                     color='r',s=5)
-    sns.scatterplot(x=pres_df.index, y=bottom_new/bottom_new.mean(), 
+    sns.scatterplot(x=combined_df.index, y=bottom_new/bottom_new.mean(), 
                     color='b',s=5)
 else:
-    plt.plot(pres_df.index,data_hour["bottom"]/data_hour["bottom"].mean(),"r")
-    plt.plot(pres_df.index,bottom_new/bottom_new.mean(),"b")
-plt.hlines(1, pres_df.index[0], pres_df.index[-1], colors="k", linestyles="dashed")
+    plt.plot(combined_df.index,data_hour["bottom"]/data_hour["bottom"].mean(),"r")
+    plt.plot(combined_df.index,bottom_new/bottom_new.mean(),"b")
+plt.hlines(1, combined_df.index[0], combined_df.index[-1], colors="k", linestyles="dashed")
 legend_elements = [Line2D([0], [0], color='r', label='bottom original'),
                    Line2D([0], [0], color='b', label='bottom corregido'),
                    Line2D([0], [0], color='k', linestyle='dashed', label='Media'),
@@ -252,14 +191,14 @@ plt.xticks(rotation=80)
 ax.xaxis.set_major_formatter(xd)
 ax.set(ylabel="Relative counts", title="Comparación c8 original vs c8 corregido")
 if quiet_days_only:
-    sns.scatterplot(x=pres_df.index, y=data_hour["c8"]/data_hour["c8"].mean(), 
+    sns.scatterplot(x=combined_df.index, y=data_hour["c8"]/data_hour["c8"].mean(), 
                     color='r', s=5)
-    sns.scatterplot(x=pres_df.index, y=coin8_new/coin8_new.mean(), 
+    sns.scatterplot(x=combined_df.index, y=coin8_new/coin8_new.mean(), 
                     color='b', s=5)
 else:
-    plt.plot(pres_df.index,data_hour["c8"]/data_hour["c8"].mean(),"r")
-    plt.plot(pres_df.index,coin8_new/coin8_new.mean(),"b")
-plt.hlines(1, pres_df.index[0], pres_df.index[-1], colors="k", linestyles="dashed")
+    plt.plot(combined_df.index,data_hour["c8"]/data_hour["c8"].mean(),"r")
+    plt.plot(combined_df.index,coin8_new/coin8_new.mean(),"b")
+plt.hlines(1, combined_df.index[0], combined_df.index[-1], colors="k", linestyles="dashed")
 legend_elements = [Line2D([0], [0], color='r', label='c8 original'),
                    Line2D([0], [0], color='b', label='c8 corregido'),
                    Line2D([0], [0], color='k', linestyle='dashed', label='Media'),
@@ -286,11 +225,11 @@ corr.columns = ["top_original","bottom_original","c8_original",
                 "top_corregido","bottom_corregido","c8_corregido"]
 
 plt.figure(100)
-Functions.plot_corr(lowest_pressure_only,corr,r_squared_threshold,"top")
+Functions.plot_corr(lowest_pressure_only,include_humidity,corr,r_squared_threshold,"top")
 plt.figure(101)
-Functions.plot_corr(lowest_pressure_only,corr,r_squared_threshold,"bottom")
+Functions.plot_corr(lowest_pressure_only,include_humidity,corr,r_squared_threshold,"bottom")
 plt.figure(102)
-Functions.plot_corr(lowest_pressure_only,corr,r_squared_threshold,"c8")
+Functions.plot_corr(lowest_pressure_only,include_humidity,corr,r_squared_threshold,"c8")
 
 if Test_neural_network:
     from sklearn.metrics import root_mean_squared_error

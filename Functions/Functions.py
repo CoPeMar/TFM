@@ -63,12 +63,12 @@ def plot_loadings(index_top,index_bottom,index_coin8,loadings):
           ax.set_title(f"Loadings PC{i+1} - bottom")
         elif i in index_coin8:
           ax.set_title(f"Loadings PC{i+1} - coin8")
-        sns.scatterplot(x = loadings.iloc[i].index, y = loadings.iloc[i],hue=loadings.loc[-1],palette={"P":"b","T":"r"})
+        sns.scatterplot(x = loadings.iloc[i].index, y = loadings.iloc[i],hue=loadings.loc[-1],palette={"P":"b","T":"r","R":"g"})
         ax.set_xlabel("Height (m)")
         ax.set_ylabel("Loading")
   
 _TYPES = Literal["top", "bottom", "c8"]      
-def plot_corr(pres_flag,corr,r_squared_threshold,sensor:_TYPES):
+def plot_corr(pres_flag,hum_flag,corr,r_squared_threshold,sensor:_TYPES):
     if pres_flag:
         pres_length = 1
         p_ori = "bo"
@@ -79,9 +79,18 @@ def plot_corr(pres_flag,corr,r_squared_threshold,sensor:_TYPES):
         p_corr = "b--"
         
     plt.plot(corr.index[:pres_length],corr[sensor + "_original"][:pres_length],p_ori,label=(sensor + " original, presión"))
-    plt.plot(corr.index[pres_length:],corr[sensor + "_original"][pres_length:],"r",label=(sensor + " original, temperatura"))
+    if hum_flag:
+        plt.plot(corr.index[pres_length:pres_length*2],corr[sensor + "_original"][pres_length:pres_length*2],"r",label=(sensor + " original, temperatura"))
+        plt.plot(corr.index[pres_length*2:],corr[sensor + "_original"][pres_length*2:],"g",label=(sensor + " original, humedad"))
+    else:
+        plt.plot(corr.index[pres_length:],corr[sensor + "_original"][pres_length:],"r",label=(sensor + " original, temperatura"))
+    
     plt.plot(corr.index[:pres_length],corr[sensor + "_corregido"][:pres_length],p_corr,label=(sensor + " corregido, presión"))
-    plt.plot(corr.index[pres_length:],corr[sensor + "_corregido"][pres_length:],"r--",label=(sensor + " corregido, temperatura"))
+    if hum_flag:
+        plt.plot(corr.index[pres_length:pres_length*2],corr[sensor + "_corregido"][pres_length:pres_length*2],"r--",label=(sensor + " corregido, temperatura"))
+        plt.plot(corr.index[pres_length*2:],corr[sensor + "_corregido"][pres_length*2:],"g--",label=(sensor + " corregido, humedad"))
+    else:
+        plt.plot(corr.index[pres_length:],corr[sensor + "_corregido"][pres_length:],"r--",label=(sensor + " corregido, temperatura"))
     plt.xlabel("Height (m)")
     plt.ylabel(f"Correlation with {sensor} counts")
     plt.title(f"Correlation {sensor}. R^2 = {r_squared_threshold}")
