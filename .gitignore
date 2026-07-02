@@ -1,0 +1,8 @@
+#Ignora cache
+__pycache__
+
+#Ignora carpeta de resultados welch/periodograma/corr
+Results/
+
+#Ignora binario
+*.pyc

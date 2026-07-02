@@ -5,6 +5,7 @@ import seaborn as sns
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression
 from typing import Literal
+from scipy.signal import welch, periodogram
 
 def plot_loss(history):
   plt.plot(history.history['loss'])
@@ -67,8 +68,10 @@ def plot_loadings(index_top,index_bottom,index_coin8,loadings):
         ax.set_xlabel("Height (m)")
         ax.set_ylabel("Loading")
   
-_TYPES = Literal["top", "bottom", "c8"]      
-def plot_corr(pres_flag,hum_flag,corr,r_squared_threshold,sensor:_TYPES):
+_TYPES = Literal["top", "bottom", "c8"] 
+_METHODS = Literal["PCA", "EFF", "EFF_M", "MSS", "Duperier", "ATE", "GRD", "MMP", "ATE+GRD",
+                   "ATE+MMP", "GRD+MMP", "ATE+GRD+MMP"]     
+def plot_corr(pres_flag,hum_flag,corr,r_squared_threshold,sensor:_TYPES,Corr_method:_METHODS):
     if pres_flag:
         pres_length = 1
         p_ori = "bo"
@@ -93,5 +96,84 @@ def plot_corr(pres_flag,hum_flag,corr,r_squared_threshold,sensor:_TYPES):
         plt.plot(corr.index[pres_length:],corr[sensor + "_corregido"][pres_length:],"r--",label=(sensor + " corregido, temperatura"))
     plt.xlabel("Height (m)")
     plt.ylabel(f"Correlation with {sensor} counts")
-    plt.title(f"Correlation {sensor}. R^2 = {r_squared_threshold}")
+    plt.title(f"Correlation {sensor}. R^2 = {r_squared_threshold}. {Corr_method}")
     plt.legend()
+    
+def welch_comparison(x,y,types=_METHODS): #Comparación de los psd antes y después de corregir.
+  freqx,psdx = welch(x.values,
+                     fs=1.0, #Datos por hora
+                     nperseg=4096) #Muestras por segmento.
+  freqy,psdy = welch(y.values,
+                     fs=1.0, #Datos por hora
+                     nperseg=4096) #Muestras por segmento
+  positivex = freqx > 0
+  positivey = freqy > 0
+  period_daysx = 1/freqx[positivex]/24
+  period_daysy = 1/freqy[positivey]/24
+  plt.figure()
+  plt.semilogx(period_daysx,psdx[positivex],label="Datos originales")
+  plt.semilogx(period_daysy,psdy[positivey],label="Datos corregidos")
+  plt.xlabel("Period (Days)")
+  plt.ylabel("PSD")
+  plt.title(f"Welch PSD, {types}")
+  plt.grid(True)
+  plt.legend()
+  
+  plt.figure()
+  mask_top = (period_daysx >= 0.3) & (period_daysx <= 3)
+  mask_corr = (period_daysy >= 0.3) & (period_daysy <= 3)
+  plt.semilogx(period_daysx[mask_top],psdx[positivex][mask_top],label="Datos originales")
+  plt.semilogx(period_daysy[mask_corr],psdy[positivey][mask_corr],label="Datos corregidos")
+  plt.xlabel("Period (Days)")
+  plt.ylabel("PSD")
+  plt.title(f"Welch PSD, {types}, 7h - 3d")
+  plt.legend()
+  plt.grid(True)
+  
+  plt.figure()
+  mask_top = (period_daysx >= 3) & (period_daysx <= 60)
+  mask_corr = (period_daysy >= 3) & (period_daysy <= 60)
+  plt.semilogx(period_daysx[mask_top],psdx[positivex][mask_top],label="Datos originales")
+  plt.semilogx(period_daysy[mask_corr],psdy[positivey][mask_corr],label="Datos corregidos")
+  plt.xlabel("Period (Days)")
+  plt.ylabel("PSD")
+  plt.title(f"Welch PSD, {types}, 3d - 60d")
+  plt.legend()
+  plt.grid(True)
+  
+  return period_daysx,psdx[positivex],period_daysy,psdy[positivey]
+
+def periodogram_comparison(x,y,types=_METHODS): #Comparación de los psd antes y después de corregir.
+  x = x-np.mean(x)
+  y = y-np.mean(y)
+  fs = 1.0 #Muestras/hora
+  freqx,psdx = periodogram(x.values,
+                     fs=fs)
+  freqy,psdy = periodogram(y.values,
+                     fs=1.0)
+  positivex = freqx > 0
+  positivey = freqy > 0
+  period_daysx = 1/freqx[positivex]/24
+  period_daysy = 1/freqy[positivey]/24
+  plt.figure()
+  plt.semilogx(period_daysx,psdx[positivex],label="Datos originales")
+  plt.semilogx(period_daysy,psdy[positivey],label="Datos corregidos")
+  plt.xlabel("Period (Days)")
+  plt.ylabel("PSD")
+  plt.title(f"Periodogram PSD, {types}")
+  plt.grid(True)
+  plt.legend()
+  
+  plt.figure()
+  mask_top = (period_daysx >= 60) & (period_daysx <= period_daysx[0])
+  mask_corr = (period_daysy >= 60) & (period_daysy <= period_daysx[0])
+  plt.semilogx(period_daysx[mask_top],psdx[positivex][mask_top],label="Datos originales")
+  plt.semilogx(period_daysy[mask_corr],psdy[positivey][mask_corr],label="Datos corregidos")
+  plt.xlabel("Period (Days)")
+  plt.ylabel("PSD")
+  plt.title(f"Periodogram PSD, {types}, 60d - {period_daysx[0]}d")
+  plt.legend()
+  plt.grid(True)
+  
+  return period_daysx,psdx[positivex],period_daysy,psdy[positivey]
+  

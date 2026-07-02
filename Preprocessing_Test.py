@@ -26,7 +26,7 @@ quiet_days_only = False #Si se quieren usar solo los días tranquilos para hacer
 lowest_pressure_only = False #Si se quieren usar solo los datos de presión más bajos 
                              #para hacer la comparación, o si se quieren usar todos 
                              #los datos.
-include_humidity = True #Si se quiere incluir la humedad en el PCA o no
+include_humidity = False #Si se quiere incluir la humedad en el PCA o no
 Test_neural_network = False #Predicción de PCA usando los datos de muones sin corregir
 
 header_1=np.append([2364],np.linspace(2500,77000,150))
@@ -130,21 +130,17 @@ if quiet_days_only:
     sns.scatterplot(x=combined_df.index, y=top_new/top_new.mean(), 
                     color='b',s=5)
 else:
-    plt.plot(combined_df.index, data_hour["top"]/data_hour["top"].mean(), color='r')
-    plt.plot(combined_df.index, top_new/top_new.mean(), color='b')
-plt.hlines(1, combined_df.index[0], combined_df.index[-1], colors="k", linestyles="dashed")
+    plt.plot(combined_df.index, data_hour["top"], color='r')
+    plt.plot(combined_df.index, top_new, color='b')
 legend_elements = [Line2D([0], [0], color='r', label='top original'),
                    Line2D([0], [0], color='b', label='top corregido'),
-                   Line2D([0], [0], color='k', linestyle='dashed', label='Media'),
                    mpatches.Patch(color='red', alpha=0.3, label='D'),
                    mpatches.Patch(color='blue', alpha=0.3, label='FD'),
                    mpatches.Patch(color='green', alpha=0.3, label='FD + GLE')]
 ax.legend(handles=legend_elements, loc='lower left')
-for i in event_rects:
-    rect = copy(i)
-    ax.add_patch(rect)
-    
-plt.ylim(0.8,1.22)
+#for i in event_rects:
+#    rect = copy(i)
+#    ax.add_patch(rect)
 
 index_bottom, bottom_new, scoef_bottom = Functions.correction(pca,
                                                            explained_variance_threshold,
@@ -225,11 +221,11 @@ corr.columns = ["top_original","bottom_original","c8_original",
                 "top_corregido","bottom_corregido","c8_corregido"]
 
 plt.figure(100)
-Functions.plot_corr(lowest_pressure_only,include_humidity,corr,r_squared_threshold,"top")
+Functions.plot_corr(lowest_pressure_only,include_humidity,corr,r_squared_threshold,"top","PCA")
 plt.figure(101)
-Functions.plot_corr(lowest_pressure_only,include_humidity,corr,r_squared_threshold,"bottom")
+Functions.plot_corr(lowest_pressure_only,include_humidity,corr,r_squared_threshold,"bottom","PCA")
 plt.figure(102)
-Functions.plot_corr(lowest_pressure_only,include_humidity,corr,r_squared_threshold,"c8")
+Functions.plot_corr(lowest_pressure_only,include_humidity,corr,r_squared_threshold,"c8","PCA")
 
 if Test_neural_network:
     from sklearn.metrics import root_mean_squared_error
@@ -289,3 +285,14 @@ if Test_neural_network:
     print(f"Pearson correlation: {pearson_corr}")
     
 print(f"Varianza eliminada: {statistics.variance(data_hour.top - top_new)/statistics.variance(data_hour.top)}")
+
+wper_top,wpsd_top,wper_corr,wpsd_corr = Functions.welch_comparison(data_hour.top,top_new,f"PCA R^2={r_squared_threshold}")
+pper_top,ppsd_top,pper_corr,ppsd_corr = Functions.periodogram_comparison(data_hour.top,top_new,f"PCA R^2={r_squared_threshold}")
+
+save_welch = pd.DataFrame({"Period": wper_corr,
+                           "Welch_PSD": wpsd_corr})
+save_periodogram = pd.DataFrame({"Period": pper_corr,
+                                 "Periodogram_PSD": ppsd_corr})
+save_welch.to_csv(f"Results/welch_PCA_{r_squared_threshold}.csv", index=False)
+save_periodogram.to_csv(f"Results/periodogram_PCA_{r_squared_threshold}.csv", index=False)
+corr.to_csv(f"Results/corr_PCA_{r_squared_threshold}.csv")
