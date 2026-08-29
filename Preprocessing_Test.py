@@ -4,20 +4,16 @@ import matplotlib.patches as mpatches
 import matplotlib.dates as md
 from matplotlib.lines import Line2D
 import numpy as np
-import random
-from pyparsing import col
 import seaborn as sns
-import dateutil
-from datetime import datetime, timedelta
+from datetime import datetime
 from copy import copy
 from sklearn.decomposition import PCA
-from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
 import statistics
 import Functions.Functions as Functions
 
 #Variables importantes
-r_squared_threshold = 0.1 #Límite de R^2 para considerar la relación entre la componente 
+r_squared_threshold = 0.05 #Límite de R^2 para considerar la relación entre la componente 
                           #principal y el conteo de partículas relevante
 explained_variance_threshold = 0.01 #Límite de varianza explicada para considerar la 
                                     #componente principal relevante
@@ -28,16 +24,25 @@ lowest_pressure_only = False #Si se quieren usar solo los datos de presión más
                              #los datos.
 include_humidity = False #Si se quiere incluir la humedad en el PCA o no
 Test_neural_network = False #Predicción de PCA usando los datos de muones sin corregir
+hay_wifi = False #Para mi conveniencia
 
 header_1=np.append([2364],np.linspace(2500,77000,150))
 header=np.append(header_1,[header_1,header_1])
-combined_df = pd.read_csv("https://media.githubusercontent.com/media/CoPeMar/TFM/refs/heads/main/combined_df.csv",
-                          parse_dates=True, index_col=0,) #Datos atmosféricos
+if hay_wifi:
+    combined_df = pd.read_csv("https://media.githubusercontent.com/media/CoPeMar/TFM/refs/heads/main/combined_df.csv",
+                              parse_dates=True, index_col=0,) #Datos atmosféricos
+else:
+    combined_df = pd.read_csv("C:/TFM_Data/Datos_Juntos/combined_df.csv",
+                              parse_dates=True, index_col=0,) #Datos atmosféricos
 combined_df.columns = header
-data_hour = pd.read_csv("https://media.githubusercontent.com/media/CoPeMar/TFM/refs/heads/main/data_hour.csv",
-                          parse_dates=True, index_col=0) #Datos de conteo de partículas
+if hay_wifi:
+    data_hour = pd.read_csv("https://media.githubusercontent.com/media/CoPeMar/TFM/refs/heads/main/data_hour.csv",
+                            parse_dates=True, index_col=0) #Datos de conteo de partículas
+else:
+    data_hour = pd.read_csv("C:/TFM_Data/Datos_Juntos/data_hour.csv",
+                            parse_dates=True, index_col=0) #Datos de conteo de partículas
 
-xd = md.DateFormatter("%Y-%m-%d %H:%M:%S")
+xd = md.DateFormatter("%Y-%m-%d")
 
 if quiet_days_only:
     temp = pd.read_csv("C:/TFM_Data/Q_Days.txt")
@@ -76,6 +81,7 @@ event_dates = ["2023-11-25 00:00:00","2023-12-04 00:00:00",
 #En este caso, se han marcado con un rectángulo rojo los eventos de tipo D,
 #azul los eventos de tipo FD y verde los eventos de tipo FD + GLE.
 event_rects = []
+top_event_rects = []
 for i in range(0, len(event_dates), 2):
     color = 'red' if i == 16 or i == 20 else 'green' if i == 6 or i == 8 or i == 18 else 'blue'
     label = 'D' if i == 16 or i == 20 else 'FD' if i == 6 or i == 8 or i == 18 else 'FD + GLE'
@@ -84,9 +90,14 @@ for i in range(0, len(event_dates), 2):
                       (datetime.strptime(event_dates[i+1], "%Y-%m-%d %H:%M:%S")) - 
                       md.date2num(datetime.strptime(event_dates[i], "%Y-%m-%d %H:%M:%S")), 
                       0.3, color=color, alpha=0.3, label=label))
+    top_event_rects.append(mpatches.Rectangle((md.date2num(datetime.strptime
+                          (event_dates[i], "%Y-%m-%d %H:%M:%S")), 18000), md.date2num
+                          (datetime.strptime(event_dates[i+1], "%Y-%m-%d %H:%M:%S")) - 
+                          md.date2num(datetime.strptime(event_dates[i], "%Y-%m-%d %H:%M:%S")), 
+                          10000, color=color, alpha=0.3, label=label))
    
 #Hacemos PCA tras elegir y reescalar los datos
-scaler = StandardScaler()
+scaler = StandardScaler(with_std=False)
 pca = PCA(n_components=30)
 
 if not include_humidity:
@@ -137,10 +148,12 @@ legend_elements = [Line2D([0], [0], color='r', label='top original'),
                    mpatches.Patch(color='red', alpha=0.3, label='D'),
                    mpatches.Patch(color='blue', alpha=0.3, label='FD'),
                    mpatches.Patch(color='green', alpha=0.3, label='FD + GLE')]
-ax.legend(handles=legend_elements, loc='lower left')
-#for i in event_rects:
-#    rect = copy(i)
-#    ax.add_patch(rect)
+first_legend = ax.legend(handles=legend_elements[:2], loc='lower left')
+ax.add_artist(first_legend)
+ax.legend(handles=legend_elements[2:],loc='upper right')
+for i in top_event_rects:
+    rect = copy(i)
+    ax.add_patch(rect)
 
 index_bottom, bottom_new, scoef_bottom = Functions.correction(pca,
                                                            explained_variance_threshold,
@@ -296,3 +309,23 @@ save_periodogram = pd.DataFrame({"Period": pper_corr,
 save_welch.to_csv(f"Results/welch_PCA_{r_squared_threshold}.csv", index=False)
 save_periodogram.to_csv(f"Results/periodogram_PCA_{r_squared_threshold}.csv", index=False)
 corr.to_csv(f"Results/corr_PCA_{r_squared_threshold}.csv")
+
+#sns.scatterplot(x=np.linspace(1,12,12),y=scoef_top["R_squared"][:12],hue=["R^2 > 0.1" if i>0.1 else "R^2 > 0.05" if i>0.05 and i<0.1 else "R^2 > 0.01" if i>0.01 and i<0.05 else "R^2 < 0.01" for i in scoef_top["R_squared"][:12]],palette={"R^2 > 0.1":"y","R^2 > 0.05":"g","R^2 > 0.01":"b","R^2 < 0.01":"r"},hue_order=["R^2 > 0.1","R^2 > 0.05","R^2 > 0.01","R^2 < 0.01"])
+#plt.xlim([0,13])
+#plt.xlabel("Componentes principales")
+#plt.ylabel("Correlación entre PC y muones")
+#plt.grid()
+#plt.legend()
+
+day_fit = Functions.fit_2sin(data_hour.top)
+day_fit_corr = Functions.fit_2sin(top_new)
+
+plt.figure()
+plt.hist(day_fit_corr.r_squared,bins=np.arange(0,1,0.05))
+plt.vlines(0.9,0,100,"k",linestyles="dashed",label="r^2 = 0.9")
+ax = plt.gca()
+ax.set(ylabel="Frecuencia", xlabel="r^2", title="Valores de r^2 de cada día para datos corregidos")
+ax.legend()
+
+print(f"Amplitud porcentual ciclo diurno: {day_fit_corr.B0_percent.mean():.2f}±{day_fit_corr.B0_percent.std(ddof=1):.2f}%")
+print(f"Amplitud porcentual ciclo semidiurno: {day_fit_corr.B1_percent.mean():.2f}±{day_fit_corr.B1_percent.std(ddof=1):.2f}%")

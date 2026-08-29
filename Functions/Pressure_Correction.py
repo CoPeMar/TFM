@@ -3,6 +3,8 @@ import numpy as np
 from pyparsing import col
 from sklearn.linear_model import LinearRegression
 import statistics
+from sklearn.preprocessing import StandardScaler
+import statsmodels.api as sm
 
 def Pressure_Correction(combined_df,data_hour):
 #Para realizar cualquiera de las correcciones que aparecen en De Mendonça et al. (2016)
@@ -43,3 +45,19 @@ def Pressure_Correction(combined_df,data_hour):
     var = statistics.variance(data_hour.top - IPC)/statistics.variance(data_hour.top)
     
     return IPC,var
+
+def Pressure_Correction_2(combined_df,data_hour):
+#La corrección realizada utilizando el método de De Mendonça et al. (2016) es bastante mala, 
+#debido probablemente a la selección de un mes en lugar de utilizar todo el conjunto de datos. 
+#Por lo tanto, realizamos una corrección de presión como en Duperier
+
+    scaler = StandardScaler(with_std=False)
+    LP = pd.DataFrame(scaler.fit_transform(combined_df.iloc[:,0].values.reshape(-1,1)),
+                      index=combined_df.index)
+    
+    modelo = sm.OLS((data_hour.top-data_hour["top"].mean())/(data_hour["top"].mean()),
+                    sm.add_constant(LP)).fit()
+    top_new = data_hour.top/(1+modelo.params[0]*LP.iloc[:,0])
+    var = statistics.variance(data_hour.top - top_new)/statistics.variance(data_hour.top)
+    
+    return top_new,var
